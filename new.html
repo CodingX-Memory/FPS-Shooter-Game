@@ -91,6 +91,20 @@
 </head>
 
 <body>
+    <div id="controls" style="position:fixed; bottom:20px; left:20px; width:100%; pointer-events:none;">
+        <!-- Movement Buttons -->
+        <div style="pointer-events:auto;">
+            <button id="btn-up" style="width:60px; height:60px;">UP</button>
+            <button id="btn-left" style="width:60px; height:60px;">LEFT</button>
+            <button id="btn-right" style="width:60px; height:60px;">RIGHT</button>
+        </div>
+
+        <!-- Action Button -->
+        <div style="position:fixed; bottom:20px; right:40px; pointer-events:auto;">
+            <button id="btn-shoot" style="width:80px; height:80px; border-radius:50%;">SHOOT</button>
+        </div>
+    </div>
+
     <div class="flash" id="flash"></div>
 
     <!-- Added Crosshair Div -->
@@ -320,6 +334,28 @@
         // Rotation Logic (A/D keys)
         if (keys['a']) p.dir -= rS;
         if (keys['d']) p.dir += rS;
+
+        // Keyboard Listeners
+        window.addEventListener('keydown', e => keys[e.key] = true);
+        window.addEventListener('keyup', e => keys[e.key] = false);
+
+        // Mobile/Pointer Listeners for On-Screen Buttons
+        function bindButton(id, keyName) {
+            const btn = document.getElementById(id);
+            if (!btn) return;
+
+            // When finger/mouse is pressed down
+            btn.onpointerdown = (e) => {
+                e.preventDefault(); // Prevents zooming/scrolling
+                keys[keyName] = true;
+            };
+
+            // When finger/mouse is released
+            btn.onpointerup = btn.onpointerleave = btn.onpointercancel = (e) => {
+                keys[keyName] = false;
+            };
+        }
+
 
         draw();
         requestAnimationFrame(update);
