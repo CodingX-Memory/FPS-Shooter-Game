@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>FPS SHOOTER - WITH GUN</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <style>
+        body {
+            margin: 0;
+            background: #111;
+            overflow: hidden;
+            font-family: 'Courier New', monospace;
+            touch-action: none;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        
+        #hud {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            color: #0f0;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 10px;
+            border: 1px solid #0f0;
+            z-index: 10;
+            pointer-events: none;
+            font-size: 12px;
+        }
+        /* --- GUN SPRITE --- */
+        
+        #weapon {
+            position: absolute;
+            bottom: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 300px;
+            height: 200px;
+            background: #222;
+            clip-path: polygon(30% 0%, 70% 0%, 75% 100%, 25% 100%);
+            /* Simple barrel shape */
+            border: 4px solid #444;
+            transition: transform 0.05s;
+            z-index: 50;
+            pointer-events: none;
+        }
+        
+        .recoil {
+            transform: translateX(-50%) translateY(40px) scale(1.1) !important;
+        }
+        
+        #crosshair {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            width: 20px;
+            height: 20px;
+            transform: translate(-50%, -50%);
+            pointer-events: none;
+            z-index: 100;
+        }
+        
+        #crosshair::before,
+        #crosshair::after {
+            content: '';
+            position: absolute;
+            background: #0f0;
+        }
+        
+        #crosshair::before {
+            top: 50%;
+            left: 0;
+            width: 100%;
+            height: 2px;
+            margin-top: -1px;
+        }
+        
+        #crosshair::after {
+            left: 50%;
+            top: 0;
+            width: 2px;
+            height: 100%;
+            margin-left: -1px;
+        }
+        
+        .flash {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: rgba(255, 255, 255, 0.8);
+            opacity: 0;
+            pointer-events: none;
+            z-index: 60;
+        }
+        
+        #controls {
+            position: fixed;
+            bottom: 20px;
+            left: 0;
+            width: 100%;
+            display: flex;
+            justify-content: space-between;
+            padding: 0 20px;
+            box-sizing: border-box;
+            z-index: 200;
+        }
+        
+        .btn-group {
+            display: flex;
+            gap: 10px;
+            pointer-events: auto;
+        }
+        
+        button {
+            width: 70px;
+            height: 70px;
+            background: rgba(0, 255, 0, 0.2);
+            border: 2px solid #0f0;
+            color: #0f0;
+            font-weight: bold;
+            border-radius: 10px;
+            touch-action: none;
+        }
+        
+        button:active {
+            background: #0f0;
+            color: #000;
+        }
+        
+        #btn-shoot {
+            border-radius: 50%;
+            width: 80px;
+            height: 80px;
+            background: rgba(255, 0, 0, 0.3);
+            border-color: red;
+            color: red;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="hud"><b>COMMANDO HUD</b><br>KILLS: <span id="k">0</span> | AMMO: <span id="a">150</span></div>
+
+    <div id="controls">
+        <div class="btn-group">
+            <button id="btn-left">LEFT</button>
+            <button id="btn-up">FWD</button>
+            <button id="btn-right">RIGHT</button>
+        </div>
+        <div class="btn-group">
+            <button id="btn-shoot">FIRE</button>
+        </div>
+    </div>
+
+    <div class="flash" id="flash"></div>
+    <div id="weapon"></div>
+    <div id="crosshair"></div>
+    <canvas id="game"></canvas>
+
+    <script>
+        const canvas = document.getElementById("game");
+        const ctx = canvas.getContext("2d");
+        const keys = {};
+
+        window.onresize = () => {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        };
+        window.onresize();
+
+        // 1. INPUT BINDING
+        function bind(id, keyName) {
+            const btn = document.getElementById(id);
+            btn.addEventListener('touchstart', (e) => {
+                e.preventDefault();
+                keys[keyName] = true;
+            }, {
+                passive: false
+            });
+            btn.addEventListener('touchend', () => keys[keyName] = false);
+            btn.addEventListener('mousedown', () => keys[keyName] = true);
+            btn.addEventListener('mouseup', () => keys[keyName] = false);
+        }
+
+        bind('btn-left', 'ArrowLeft');
+        bind('btn-right', 'ArrowRight');
+        bind('btn-up', 'ArrowUp');
+        bind('btn-shoot', ' ');
+
+        window.addEventListener('keydown', e => keys[e.key] = true);
+        window.addEventListener('keyup', e => keys[e.key] = false);
+
+        // 2. PLAYER & WORLD
+        const mSize = 50;
+        const map = Array(mSize).fill().map(() => Array(mSize).fill(1));
+        let p = {
+            x: 2.5,
+            y: 2.5,
+            dir: 0,
+            ammo: 150,
+            firing: false
+        };
+
+        function gen() {
+            let x = 2,
+                y = 2;
+            for (let i = 0; i < 800; i++) {
+                let d = Math.floor(Math.random() * 4);
+                if (d == 0 && x < mSize - 2) x++;
+                else if (d == 1 && x > 2) x--;
+                else if (d == 2 && y < mSize - 2) y++;
+                else if (d == 3 && y > 2) y--;
+                map[y][x] = 0;
+            }
+        }
+        gen();
+
+        function shoot() {
+            if (p.firing || p.ammo <= 0) return;
+            p.firing = true;
+            p.ammo--;
+            document.getElementById('a').innerText = p.ammo;
+
+            // Visuals
+            const weapon = document.getElementById('weapon');
+            const flash = document.getElementById('flash');
+
+            weapon.classList.add('recoil');
+            flash.style.opacity = "1";
+
+            setTimeout(() => {
+                weapon.classList.remove('recoil');
+                flash.style.opacity = "0";
+                p.firing = false;
+            }, 50);
+        }
+
+        // 3. MAIN LOOP
+        function update() {
+            if (keys['ArrowLeft']) p.dir -= 0.06;
+            if (keys['ArrowRight']) p.dir += 0.06;
+            if (keys['ArrowUp']) {
+                let nx = p.x + Math.cos(p.dir) * 0.12;
+                let ny = p.y + Math.sin(p.dir) * 0.12;
+                if (map[Math.floor(ny)] && map[Math.floor(ny)][Math.floor(nx)] === 0) {
+                    p.x = nx;
+                    p.y = ny;
+                }
+            }
+            if (keys[' ']) shoot();
+
+            draw();
+            requestAnimationFrame(update);
+        }
+
+        // 4. RAYCASTER RENDERER
+        function draw() {
+            ctx.fillStyle = "#111";
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = "#222";
+            ctx.fillRect(0, canvas.height / 2, canvas.width, canvas.height / 2);
+
+            const res = 4;
+            for (let i = 0; i < canvas.width; i += res) {
+                let angle = p.dir - 0.6 + (i / canvas.width) * 1.2;
+                let dx = Math.cos(angle),
+                    dy = Math.sin(angle);
+                let dist = 0,
+                    hit = false;
+
+                while (!hit && dist < 15) {
+                    dist += 0.1;
+                    if (map[Math.floor(p.y + dy * dist)][Math.floor(p.x + dx * dist)] === 1) hit = true;
+                }
+
+                let h = canvas.height / (dist * Math.cos(angle - p.dir));
+                let color = Math.max(0, 255 - dist * 15);
+                ctx.fillStyle = `rgb(0, ${color}, ${color/2})`;
+                ctx.fillRect(i, (canvas.height - h) / 2, res, h);
+            }
+        }
+
+        update();
+    </script>
+</body>
+
+</html>
