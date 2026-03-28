@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>FPS SHOOTER</title>
+    <style>
+        body {
+            margin: 0;
+            background: #444;
+            overflow: hidden;
+            font-family: 'Courier New', monospace;
+        }
+        
+        #hud {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            color: #0f0;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 15px;
+            border: 2px solid #0f0;
+            z-index: 10;
+            pointer-events: none;
+        }
+        
+        #weapon {
+            position: absolute;
+            bottom: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 400px;
+            image-rendering: pixelated;
+            pointer-events: none;
+        }
+        
+        .flash {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: white;
+            opacity: 0;
+            pointer-events: none;
+            z-index: 5;
+        }
+        
+        canvas {
+            display: block;
+            image-rendering: pixelated;
+        }
+        /* --- NEW CROSSHAIR STYLE --- */
+        
+        #crosshair {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            width: 20px;
+            height: 20px;
+            transform: translate(-50%, -50%);
+            pointer-events: none;
+            z-index: 100;
+        }
+        
+        #crosshair::before,
+        #crosshair::after {
+            content: '';
+            position: absolute;
+            background: #0f0;
+            box-shadow: 0 0 5px #0f0;
+        }
+        /* Horizontal line */
+        
+        #crosshair::before {
+            top: 50%;
+            left: 0;
+            width: 100%;
+            height: 2px;
+            margin-top: -1px;
+        }
+        /* Vertical line */
+        
+        #crosshair::after {
+            left: 50%;
+            top: 0;
+            width: 2px;
+            height: 100%;
+            margin-left: -1px;
+        }
+        /* Add this to your <style> tag */
+        
+        canvas,
+        body {
+            touch-action: none;
+            /* Disables 300ms click delay & scrolling */
+            user-select: none;
+            /* Prevents accidental text highlights */
+            -webkit-user-select: none;
+            overflow: hidden;
+            /* Prevents screen shaking */
+        }
+    </style>
+</head>
+
+<body>
+    <div id="controls" style="position:fixed; bottom:20px; left:20px; width:100%; pointer-events:none;">
+        <!-- Movement Buttons -->
+        <div style="pointer-events:auto;">
+            <button id="btn-left" style="width:60px; height:60px;">LEFT</button>
+            <button id="btn-right" style="width:60px; height:60px;">RIGHT</button>
+        </div>
+
+        <!-- Action Button -->
+        <div style="position:fixed; bottom:20px; right:40px; pointer-events:auto;">
+            <button id="btn-shoot" style="width:80px; height:80px; border-radius:50%;">SHOOT</button>
+        </div>
+    </div>
+
+    <div class="flash" id="flash"></div>
+
+    <!-- Added Crosshair Div -->
+    <div id="crosshair"></div>
+
+    <div id="hud"><b>COMMANDO HUD v2.0</b><br>KILLS: <span id="k">0</span> | AMMO: <span id="a">150</span></div>
+    <canvas id="game"></canvas>
+
+    <script>
+        function bindRotation(id, keyName) {
+            const btn = document.getElementById(id);
+            if (!btn) return;
+
+            // Start rotating when touched
+            btn.addEventListener('touchstart', (e) => {
+                e.preventDefault(); // Prevents accidental zooming/scrolling
+                keys[keyName] = true;
+            }, {
+                passive: false
+            });
+
+            // Stop rotating when finger is lifted or leaves the button
+            btn.addEventListener('touchend', () => keys[keyName] = false);
+            btn.addEventListener('touchcancel', () => keys[keyName] = false);
+        }
+
+        // Bind your HTML button IDs to the keys used in your game loop
+        bindRotation('left-btn', 'ArrowLeft');
+        bindRotation('right-btn', 'ArrowRight');
+
+        // Use Pointer Events for instant, multi-touch response
+        window.addEventListener('pointerdown', handleTouch);
+        window.addEventListener('pointermove', handleTouch);
+        window.addEventListener('pointerup', (e) => {
+            // Clear keys when finger is lifted
+            keys['ArrowUp'] = false;
+            keys['ArrowLeft'] = false;
+            keys['ArrowRight'] = false;
+        });
+
+        function handleTouch(e) {
+            e.preventDefault(); // Critical: stops mobile "bounce" and lag
+
+            const screenWidth = window.innerWidth;
+            const touchX = e.clientX;
+
+            if (touchX < screenWidth / 2) {
+                // Left side of screen = Move Forward
+                keys['ArrowUp'] = true;
+            } else {
+                // Right side of screen = Rotate
+                // If they touch the far right, rotate right. Near middle, rotate left.
+                if (touchX > (screenWidth * 0.75)) {
+                    keys['ArrowRight'] = true;
+                    keys['ArrowLeft'] = false;
+                } else {
+                    keys['ArrowLeft'] = true;
+                    keys['ArrowRight'] = false;
+                }
+            }
+        }
+
+        window.addEventListener('keydown', (e) => {
+            keys[e.key] = true;
+        });
+
+        window.addEventListener('keyup', (e) => {
+            keys[e.key] = false;
+        });
+
+        const canvas = document.getElementById("game");
+        const ctx = canvas.getContext("2d");
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+
+        // 1. ADVANCED MAP GENERATION (50x50)
+        const mSize = 250;
+        const map = Array(mSize).fill().map(() => Array(mSize).fill(1));
+        let enemies = [];
+
+        let o = {
+            x: 2,
+            y: 2,
+            dir: 0,
+            dy: 0, // Vertical speed
+            jumpPower: -0.15, // How high the player jumps (negative goes up)
+            gravity: 0.005, // How fast the player falls back down
+            isGrounded: true // Prevents jumping while already in the air
+        };
+
+
+        function gen() {
+            let x = 2,
+                y = 2;
+            for (let i = 0; i < 4000; i++) {
+                let d = Math.floor(Math.random() * 4);
+                if (d == 0 && x < mSize - 2) x++;
+                else if (d == 1 && x > 2) x--;
+                else if (d == 2 && y < mSize - 2) y++;
+                else if (d == 3 && y > 2) y--;
+                map[y][x] = 0;
+                if (Math.random() > 0.995) enemies.push({
+                    x: x + 0.5,
+                    y: y + 0.5,
+                    hp: 1
+                });
+            }
+        }
+        gen();
+
+        // 2. TEXTURES & WEAPON
+        const texSize = 64;
+        const tex = document.createElement('canvas');
+        tex.width = tex.height = 64;
+        const tCtx = tex.getContext('2d');
+        tCtx.fillStyle = "#222";
+        tCtx.fillRect(0, 0, 64, 64);
+        for (let i = 0; i < 40; i++) {
+            tCtx.fillStyle = "#00ff88";
+            tCtx.globalAlpha = 0.1;
+            tCtx.fillRect(Math.random() * 64, Math.random() * 64, 10, 10);
+        }
+
+        // 3. GAME STATE
+        let p = {
+            x: 2.5,
+            y: 2.5,
+            dir: 0,
+            kills: 0,
+            ammo: 150,
+            firing: false
+        };
+        let keys = {};
+        window.addEventListener('pointerdown', (e) => {
+            // Optional: window.focus() ensures keys work after a click
+            window.focus();
+            shoot();
+        });
+        window.onkeyup = (e) => keys[e.key.toLowerCase()] = false;
+
+        function shoot() {
+            if (p.firing || p.ammo <= 0) return;
+            p.firing = true;
+            p.ammo--;
+            document.getElementById('flash').style.opacity = "0.5";
+            setTimeout(() => {
+                document.getElementById('flash').style.opacity = "0";
+                p.firing = false;
+            }, 100);
+
+            // Hitscan Logic: Check if enemy is in the center ray
+            enemies.forEach(en => {
+                let dx = en.x - p.x,
+                    dy = en.y - p.y;
+                let dist = Math.sqrt(dx * dx + dy * dy);
+                let angle = Math.atan2(dy, dx) - p.dir;
+                while (angle < -Math.PI) angle += 2 * Math.PI;
+                while (angle > Math.PI) angle -= 2 * Math.PI;
+                // Check if enemy is alive and within the crosshair angle
+                if (en.hp > 0 && Math.abs(angle) < 0.1 && dist < 10) {
+                    en.hp = 0;
+                    p.kills++;
+                }
+            });
+            document.getElementById('k').innerText = p.kills;
+            document.getElementById('a').innerText = p.ammo;
+        }
+
+        function draw() {
+            ctx.fillStyle = "#0a0a0a";
+            ctx.fillRect(0, 0, canvas.width, canvas.height / 2);
+            ctx.fillStyle = "#111";
+            ctx.fillRect(0, canvas.height / 2, canvas.width, canvas.height / 2);
+
+            let zB = [];
+            const rays = canvas.width / 2;
+            const fov = 1.0;
+            for (let i = 0; i < rays; i++) {
+                let rA = (p.dir - fov / 2) + (i / rays) * fov;
+                let d = 0,
+                    hit = false,
+                    hX, hY;
+                while (!hit && d < 20) {
+                    d += 0.05;
+                    hX = p.x + Math.cos(rA) * d;
+                    hY = p.y + Math.sin(rA) * d;
+                    if (map[Math.floor(hY)] && map[Math.floor(hY)][Math.floor(hX)] === 1) hit = true;
+                }
+                let cD = d * Math.cos(rA - p.dir);
+                zB[i] = cD;
+                let h = canvas.height / cD;
+                let tX = Math.floor(((hX % 1) + (hY % 1)) * texSize) % texSize;
+                ctx.drawImage(tex, tX, 0, 1, texSize, i * 2, (canvas.height - h) / 2, 2, h);
+                ctx.fillStyle = `rgba(0,0,0,${Math.min(1, cD/12)})`;
+                ctx.fillRect(i * 2, (canvas.height - h) / 2, 2, h);
+            }
+
+            // SPRITES (Enemies)
+            enemies.forEach(en => {
+                if (en.hp <= 0) return;
+                let dx = en.x - p.x,
+                    dy = en.y - p.y;
+                let dist = Math.sqrt(dx * dx + dy * dy);
+                let angle = Math.atan2(dy, dx) - p.dir;
+                while (angle < -Math.PI) angle += 2 * Math.PI;
+                while (angle > Math.PI) angle -= 2 * Math.PI;
+                if (Math.abs(angle) < 1) {
+                    let sX = (0.5 * (angle / (fov / 2)) + 0.5) * canvas.width;
+                    let h = canvas.height / dist;
+                    if (zB[Math.floor((sX / canvas.width) * rays)] > dist) {
+                        ctx.fillStyle = "red";
+                        ctx.fillRect(sX - h / 4, (canvas.height - h) / 2, h / 2, h);
+                    }
+                }
+            });
+
+            // WEAPON HUD
+            ctx.fillStyle = "#444";
+            ctx.fillRect(canvas.width / 2 - 30, canvas.height - 150 + (p.firing ? 20 : 0), 60, 200);
+        }
+
+        function update() {
+            let s = 0.08;
+            if (keys['w'] || keys['W'] || keys['ArrowUp']) {
+                console.log("Movement triggered!"); // If this doesn't show up, 'keys' is empty
+
+                let nx = p.x + Math.cos(p.dir) * s;
+                let ny = p.y + Math.sin(p.dir) * s;
+
+                // Check if collision logic is blocking you
+                if (map[Math.floor(ny)] && map[Math.floor(ny)][Math.floor(nx)] === 0) {
+                    p.x = nx;
+                    p.y = ny;
+                } else {
+                    console.log("Collision detected at:", Math.floor(nx), Math.floor(ny));
+                }
+            }
+
+            if (keys['s'] || keys['S'] || keys['ArrowDown']) {
+                console.log("Movement triggered!"); // If this doesn't show up, 'keys' is empty
+
+                let nx = p.x - Math.cos(p.dir) * s;
+                let ny = p.y - Math.sin(p.dir) * s;
+
+                // Check if collision logic is blocking you
+                if (map[Math.floor(ny)] && map[Math.floor(ny)][Math.floor(nx)] === 0) {
+                    p.x = nx;
+                    p.y = ny;
+                } else {
+                    console.log("Collision detected at:", Math.floor(nx), Math.floor(ny));
+                }
+            }
+
+            if (keys['a'] || keys['arrowleft']) p.dir -= 0.06;
+            if (keys['d'] || keys['arrowright']) p.dir += 0.06;
+        }
+
+        (function loop() {
+            update();
+            draw();
+            requestAnimationFrame(loop);
+        })();
+        // Movement Logic
+        if (keys['w'] || keys['W'] || keys['ArrowUp']) {
+            let nx = p.x + Math.cos(p.dir) * s;
+            let ny = p.y + Math.sin(p.dir) * s;
+            if (map[Math.floor(ny)] && map[Math.floor(ny)][Math.floor(nx)] === 0) {
+                p.x = nx;
+                p.y = ny;
+            }
+        }
+        if (keys['s']) {
+            let nx = p.x - Math.cos(p.dir) * s;
+            let ny = p.y - Math.sin(p.dir) * s;
+            if (map[Math.floor(ny)] && map[Math.floor(ny)][Math.floor(nx)] === 0) {
+                p.x = nx;
+                p.y = ny;
+            }
+        }
+        // Rotation Logic (A/D keys)
+        if (keys['a']) p.dir -= rS;
+        if (keys['d']) p.dir += rS;
+
+        // Keyboard Listeners
+        window.addEventListener('keydown', e => keys[e.key] = true);
+        window.addEventListener('keyup', e => keys[e.key] = false);
+
+        // Mobile/Pointer Listeners for On-Screen Buttons
+        function bindButton(id, keyName) {
+            const btn = document.getElementById(id);
+            if (!btn) return;
+
+            // When finger/mouse is pressed down
+            btn.onpointerdown = (e) => {
+                e.preventDefault(); // Prevents zooming/scrolling
+                keys[keyName] = true;
+            };
+
+            // When finger/mouse is released
+            btn.onpointerup = btn.onpointerleave = btn.onpointercancel = (e) => {
+                keys[keyName] = false;
+            };
+        }
+
+
+        draw();
+        requestAnimationFrame(update);
+
+
+        // --- MOUSE CONTROLS ---
+        canvas.onclick = () => canvas.requestPointerLock();
+        window.onmousemove = (e) => {
+            if (document.pointerLockElement === canvas) {
+                p.dir += e.movementX * 0.003;
+            }
+        };
+
+        // Start Game
+        update();
+    </script>
+</body>
+
+</html>
