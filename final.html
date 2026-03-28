@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>FPS SHOOTER - FINAL VERSION</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <style>
+        body {
+            margin: 0;
+            background: #000;
+            overflow: hidden;
+            font-family: 'Courier New', Courier, monospace;
+            touch-action: none;
+            user-select: none;
+        }
+        /* HUD & UI */
+        
+        #hud {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            color: #ffcc00;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 12px;
+            border: 2px solid #ffcc00;
+            z-index: 10;
+            font-size: 14px;
+            border-radius: 4px;
+            pointer-events: none;
+            box-shadow: 0 0 10px rgba(255, 204, 0, 0.3);
+        }
+        
+        #hp-bar {
+            width: 100px;
+            height: 10px;
+            background: #300;
+            border: 1px solid #f00;
+            margin-top: 5px;
+        }
+        
+        #hp-fill {
+            width: 100%;
+            height: 100%;
+            background: #f00;
+            transition: 0.2s;
+        }
+        /* WEAPON */
+        
+        #weapon {
+            position: absolute;
+            bottom: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 280px;
+            height: 240px;
+            background: #222;
+            clip-path: polygon(40% 0%, 60% 0%, 80% 100%, 20% 100%);
+            border-top: 10px solid #ff6600;
+            transition: transform 0.05s;
+            z-index: 50;
+            pointer-events: none;
+        }
+        
+        .recoil {
+            transform: translateX(-50%) translateY(35px) scale(1.1) !important;
+        }
+        /* --- CUSTOM GAME OVER & RESTART --- */
+        
+        #game-over {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(10, 0, 0, 0.95);
+            backdrop-filter: blur(10px);
+            z-index: 1000;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            color: #ff0055;
+            text-align: center;
+        }
+        
+        #game-over h1 {
+            font-size: 60px;
+            margin: 0;
+            text-shadow: 0 0 20px #ff0055;
+            letter-spacing: 5px;
+        }
+        
+        #game-over button {
+            margin-top: 40px;
+            padding: 15px 60px;
+            font-size: 20px;
+            font-family: 'Courier New', monospace;
+            background: transparent;
+            color: #00f2ff;
+            border: 2px solid #00f2ff;
+            cursor: pointer;
+            font-weight: bold;
+            text-transform: uppercase;
+            letter-spacing: 4px;
+            box-shadow: 0 0 15px rgba(0, 242, 255, 0.4);
+            transition: all 0.2s ease;
+            animation: pulse 1.5s infinite;
+        }
+        
+        #game-over button:hover {
+            background: #00f2ff;
+            color: #000;
+            box-shadow: 0 0 30px #00f2ff;
+            transform: scale(1.1);
+        }
+        
+        #game-over button:active {
+            transform: scale(0.95);
+        }
+        
+        @keyframes pulse {
+            0% {
+                box-shadow: 0 0 10px rgba(0, 242, 255, 0.4);
+            }
+            50% {
+                box-shadow: 0 0 25px rgba(0, 242, 255, 0.8);
+            }
+            100% {
+                box-shadow: 0 0 10px rgba(0, 242, 255, 0.4);
+            }
+        }
+        /* CONTROLS */
+        
+        #controls {
+            position: fixed;
+            bottom: 25px;
+            left: 0;
+            width: 100%;
+            display: flex;
+            justify-content: space-between;
+            padding: 0 25px;
+            box-sizing: border-box;
+            z-index: 200;
+        }
+        
+        .ctrl-btn {
+            width: 70px;
+            height: 70px;
+            background: rgba(255, 255, 255, 0.1);
+            border: 2px solid #fff;
+            color: #fff;
+            font-weight: bold;
+            border-radius: 12px;
+            outline: none;
+        }
+        
+        .ctrl-btn:active {
+            background: #fff;
+            color: #000;
+        }
+        
+        #btn-shoot {
+            border-radius: 50%;
+            width: 85px;
+            height: 85px;
+            background: rgba(255, 0, 0, 0.2);
+            border-color: #ff0055;
+            color: #ff0055;
+        }
+        
+        .flash {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: rgba(255, 255, 255, 0.4);
+            opacity: 0;
+            pointer-events: none;
+            z-index: 60;
+        }
+        
+        canvas {
+            display: block;
+            image-rendering: pixelated;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="hud"><b>UNIT STATUS: ONLINE</b><br>KILLS: <span id="k">0</span> | POWER: <span id="a">150</span>
+        <div id="hp-bar">
+            <div id="hp-fill"></div>
+        </div>
+    </div>
+
+    <div id="game-over">
+        <h1>CONNECTION LOST</h1>
+        <p id="final-score" style="color: #666; font-size: 20px;">SCORE: 0</p>
+        <button onclick="location.reload()">RE-BOOT SYSTEM</button>
+    </div>
+
+    <div id="controls">
+        <div style="display: flex; gap: 10px;">
+            <button class="ctrl-btn" id="btn-left">LEFT</button>
+            <button class="ctrl-btn" id="btn-up">FWD</button>
+            <button class="ctrl-btn" id="btn-right">RIGHT</button>
+        </div>
+        <button class="ctrl-btn" id="btn-shoot">FIRE</button>
+    </div>
+
+    <div class="flash" id="flash"></div>
+    <div id="weapon"></div>
+    <canvas id="game"></canvas>
+
+    <script>
+        const canvas = document.getElementById("game");
+        const ctx = canvas.getContext("2d");
+        const keys = {};
+        let isGameOver = false;
+
+        window.onresize = () => {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        };
+        window.onresize();
+
+        function bind(id, keyName) {
+            const btn = document.getElementById(id);
+            btn.addEventListener('touchstart', (e) => {
+                e.preventDefault();
+                keys[keyName] = true;
+            }, {
+                passive: false
+            });
+            btn.addEventListener('touchend', () => keys[keyName] = false);
+            btn.addEventListener('mousedown', () => keys[keyName] = true);
+            btn.addEventListener('mouseup', () => keys[keyName] = false);
+        }
+        bind('btn-left', 'ArrowLeft');
+        bind('btn-right', 'ArrowRight');
+        bind('btn-up', 'ArrowUp');
+        bind('btn-shoot', ' ');
+
+        const mSize = 30;
+        const map = Array(mSize).fill().map(() => Array(mSize).fill(1));
+        let p = {
+            x: 3,
+            y: 3,
+            dir: 0,
+            ammo: 150,
+            kills: 0,
+            hp: 100,
+            firing: false
+        };
+        let enemies = [];
+
+        function gen() {
+            let x = 3,
+                y = 3;
+            for (let i = 0; i < 600; i++) {
+                let d = Math.floor(Math.random() * 4);
+                if (d == 0 && x < mSize - 3) x++;
+                else if (d == 1 && x > 3) x--;
+                else if (d == 2 && y < mSize - 3) y++;
+                else if (d == 3 && y > 2) y--;
+                map[y][x] = 0;
+            }
+            for (let i = 0; i < 10; i++) {
+                let ex, ey;
+                do {
+                    ex = Math.floor(Math.random() * mSize);
+                    ey = Math.floor(Math.random() * mSize);
+                } while (map[ey][ex] !== 0);
+                enemies.push({
+                    x: ex + 0.5,
+                    y: ey + 0.5,
+                    alive: true
+                });
+            }
+        }
+        gen();
+
+        function shoot() {
+            if (p.firing || p.ammo <= 0 || isGameOver) return;
+            p.firing = true;
+            p.ammo--;
+            document.getElementById('a').innerText = p.ammo;
+            document.getElementById('weapon').classList.add('recoil');
+            document.getElementById('flash').style.opacity = "1";
+
+            enemies.forEach(en => {
+                if (!en.alive) return;
+                let dx = en.x - p.x,
+                    dy = en.y - p.y;
+                let angle = Math.atan2(dy, dx) - p.dir;
+                while (angle < -Math.PI) angle += Math.PI * 2;
+                while (angle > Math.PI) angle -= Math.PI * 2;
+                let dist = Math.sqrt(dx * dx + dy * dy);
+                if (Math.abs(angle) < 0.2 && dist < 12) {
+                    en.alive = false;
+                    p.kills++;
+                    document.getElementById('k').innerText = p.kills;
+                }
+            });
+            setTimeout(() => {
+                document.getElementById('weapon').classList.remove('recoil');
+                document.getElementById('flash').style.opacity = "0";
+                p.firing = false;
+            }, 60);
+        }
+
+        function update() {
+            if (isGameOver) return;
+            if (keys['ArrowLeft']) p.dir -= 0.07;
+            if (keys['ArrowRight']) p.dir += 0.07;
+            if (keys['ArrowUp']) {
+                let nx = p.x + Math.cos(p.dir) * 0.1,
+                    ny = p.y + Math.sin(p.dir) * 0.1;
+                if (map[Math.floor(ny)][Math.floor(nx)] === 0) {
+                    p.x = nx;
+                    p.y = ny;
+                }
+            }
+            if (keys[' ']) shoot();
+
+            enemies.forEach(en => {
+                if (!en.alive) return;
+                let dx = p.x - en.x,
+                    dy = p.y - en.y;
+                let dist = Math.sqrt(dx * dx + dy * dy);
+                if (dist < 0.6) {
+                    p.hp -= 0.7;
+                    document.getElementById('hp-fill').style.width = p.hp + "%";
+                    if (p.hp <= 0) {
+                        isGameOver = true;
+                        document.getElementById('game-over').style.display = 'flex';
+                        document.getElementById('final-score').innerText = "SCORE: " + p.kills;
+                    }
+                }
+                if (dist < 10 && dist > 0.5) {
+                    en.x += (dx / dist) * 0.012;
+                    en.y += (dy / dist) * 0.012;
+                }
+            });
+            draw();
+            requestAnimationFrame(update);
+        }
+
+        function draw() {
+            ctx.fillStyle = "#000";
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = "#111";
+            ctx.fillRect(0, canvas.height / 2, canvas.width, canvas.height / 2);
+            let zB = [];
+            const res = 6;
+            for (let i = 0; i < canvas.width; i += res) {
+                let angle = p.dir - 0.6 + (i / canvas.width) * 1.2;
+                let dx = Math.cos(angle),
+                    dy = Math.sin(angle),
+                    dist = 0,
+                    hit = false;
+                while (!hit && dist < 15) {
+                    dist += 0.1;
+                    if (map[Math.floor(p.y + dy * dist)][Math.floor(p.x + dx * dist)] === 1) hit = true;
+                }
+                zB.push(dist);
+                let h = canvas.height / (dist * Math.cos(angle - p.dir));
+                let b = Math.max(0, 180 - dist * 15);
+                ctx.fillStyle = `rgb(0, ${b}, ${b * 0.4})`;
+                ctx.fillRect(i, (canvas.height - h) / 2, res, h);
+            }
+            enemies.sort((a, b) => (b.x - p.x) ** 2 + (b.y - p.y) ** 2 - ((a.x - p.x) ** 2 + (a.y - p.y) ** 2));
+            enemies.forEach(en => {
+                if (!en.alive) return;
+                let dx = en.x - p.x,
+                    dy = en.y - p.y,
+                    dist = Math.sqrt(dx * dx + dy * dy);
+                let angle = Math.atan2(dy, dx) - p.dir;
+                while (angle < -Math.PI) angle += Math.PI * 2;
+                while (angle > Math.PI) angle -= Math.PI * 2;
+                if (Math.abs(angle) < 0.8) {
+                    let sx = (angle / 1.2 + 0.5) * canvas.width;
+                    let sh = canvas.height / dist;
+                    if (dist < zB[Math.floor(sx / res)]) {
+                        ctx.fillStyle = "#ff0055";
+                        ctx.fillRect(sx - sh / 4, (canvas.height - sh) / 2, sh / 2, sh);
+                    }
+                }
+            });
+        }
+        update();
+    </script>
+</body>
+
+</html>
